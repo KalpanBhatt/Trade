@@ -2,6 +2,7 @@
 
 require_once $_SERVER['DOCUMENT_ROOT'].'/Trade/simple_html_dom.php';
 require_once $_SERVER['DOCUMENT_ROOT'].'/Trade/starter.php';
+require_once $_SERVER['DOCUMENT_ROOT'].'/Trade/email.php';
 
 require 'vendor/autoload.php';
 Use Carbon\Carbon;
@@ -35,11 +36,18 @@ foreach($FetchedMajors as $symbol){
 		    $row = $query->execute($param) or die(print_r($query->errorInfo(), true));
 		}
 }
-
-echo ("Finished Processing - DB Update completed");
+echo "<!DOCTYPE html>";
+echo ("<h4>Finished Processing - DB Update completed.</h4>");
 $sql = "SELECT * FROM zackRank";
 $query = $dbObj->query($sql);
 $FetchedMajors = $query->fetchAll();
+$renderHTML = '';
+foreach($FetchedMajors as $symbol){
+		$renderHTML = $renderHTML.'<p>'.$symbol['Symbol'].' - '.$symbol['Rank'].'</p>';
+}
+echo ($renderHTML);
+
+sendMail();
 
 
 //SnPRanks();

@@ -1,6 +1,7 @@
 {	
     "require": {
-        "nesbot/Carbon": "^1.22"
+        "nesbot/Carbon": "^1.22",
+        "PHPMailer/PHPMailer": "^5.2"
     },
     "autoload": {
         "psr-4": {
