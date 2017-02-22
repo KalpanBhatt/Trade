@@ -1,0 +1,11 @@
+{	
+    "require": {
+        "nesbot/Carbon": "^1.22"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Bootstrap\\": "bootstrap/"
+        }
+    }
+}
