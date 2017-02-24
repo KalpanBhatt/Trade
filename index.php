@@ -1,8 +1,8 @@
 <?php
 
-require_once $_SERVER['DOCUMENT_ROOT'].'/Trade/simple_html_dom.php';
-require_once $_SERVER['DOCUMENT_ROOT'].'/Trade/starter.php';
-require_once $_SERVER['DOCUMENT_ROOT'].'/Trade/email.php';
+require_once $_SERVER['DOCUMENT_ROOT'].'/simple_html_dom.php';
+require_once $_SERVER['DOCUMENT_ROOT'].'/starter.php';
+require_once $_SERVER['DOCUMENT_ROOT'].'/email.php';
 
 require 'vendor/autoload.php';
 Use Carbon\Carbon;
@@ -10,8 +10,8 @@ Use Carbon\Carbon;
 $CONFIG['DB'] = array(
     'dbDriver'	=> 	'mysql',
     'hostname' 	=> 	'localhost',
-    'username' 	=> 	'root',
-    'password' 	=> 	'',
+    'username' 	=> 	'homestead',
+    'password' 	=> 	'secret',
     'dbName'	=>	'Trade'
 );
 
@@ -23,9 +23,7 @@ $query = $dbObj->query($sql);
 $FetchedMajors = $query->fetchAll();
 
 foreach($FetchedMajors as $symbol){
-
-		if(Carbon::now("America/New_York")->diffInHours(Carbon::parse($symbol['Updated_At'], 'America/New_York')) > 24){
-				var_dump(Carbon::now("America/New_York")->diffInHours(Carbon::parse($symbol['Updated_At'], 'America/New_York')));
+		if(Carbon::now("America/New_York")->diffInHours(Carbon::parse($symbol['Updated_At'], 'America/New_York')) > 24 || $symbol['Updated_At'] == NULL){
 		    $query = $dbObj->prepare("UPDATE zackRank set Rank=:Rank, Updated_At=:currentDatetime where symbol=:symbol");
 		    $param = array(
 		        ':Rank' => getRank($symbol['Symbol']),
@@ -37,31 +35,34 @@ foreach($FetchedMajors as $symbol){
 		}
 }
 echo "<!DOCTYPE html>";
-echo ("<h4>Finished Processing - DB Update completed.</h4>");
-$sql = "SELECT * FROM zackRank";
+$sql = "SELECT * FROM zackRank where Rank < 3";
 $query = $dbObj->query($sql);
 $FetchedMajors = $query->fetchAll();
-$renderHTML = '';
+
+$renderHTML = "<h4>Finished Processing - DB Update completed.</h4>";
+$renderHTML = $renderHTML . 
+            "<table border='1'>
+                <tr>
+                    <td> SYMBOL </td>
+                    <td> RANK </td>
+                    <td> COMPANY NAME </td>
+                    <td> Earnings Date </td>
+                </tr>";
 foreach($FetchedMajors as $symbol){
-		$renderHTML = $renderHTML.'<p>'.$symbol['Symbol'].' - '.$symbol['Rank'].'</p>';
+		$renderHTML = $renderHTML.
+                '<tr>
+                    <td>'.$symbol['Symbol'].'</td>
+                    <td>'.$symbol['Rank'].'</td>
+                    <td>'.$symbol['Company_Name'].'</td>
+                    <td>'.$symbol['NextEarningsDate'].'</td>
+                </tr>';
 }
+$renderHTML = $renderHTML . "</table>";
 echo ($renderHTML);
 
-sendMail();
-
+sendMail($renderHTML);
 
 //SnPRanks();
-
-//	echo(getRank("AAPL"));
-//	echo "<br />";
-
-//	echo(getNextEarningsDate("AAPL"));
-//	echo "<br />";
-
-//	$news = getYahooPrice("AAPL");
-//	foreach($news as $curNews){
-//		echo($curNews->outertext());
-//	}
 
 function SnPRanks(){
     $stocklist = array();
