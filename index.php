@@ -1,46 +1,69 @@
 <?php
 
-require_once $_SERVER['DOCUMENT_ROOT'].'/simple_html_dom.php';
-require_once $_SERVER['DOCUMENT_ROOT'].'/starter.php';
-require_once $_SERVER['DOCUMENT_ROOT'].'/email.php';
+if (strpos($_SERVER['DOCUMENT_ROOT'], 'C:') !== false) {
+  require_once $_SERVER['DOCUMENT_ROOT'].'/Trade/simple_html_dom.php';
+  require_once $_SERVER['DOCUMENT_ROOT'].'/Trade/starter.php';
+  require_once $_SERVER['DOCUMENT_ROOT'].'/Trade/email.php';
 
-require 'vendor/autoload.php';
+  require 'vendor/autoload.php';
+
+  $CONFIG['DB'] = array(
+      'dbDriver'	=> 	'mysql',
+      'hostname' 	=> 	'localhost',
+      'username' 	=> 	'root',
+      'password' 	=> 	'',
+      'dbName'	=>	'Trade'
+  );
+
+} else {
+  require_once $_SERVER['DOCUMENT_ROOT'].'/simple_html_dom.php';
+  require_once $_SERVER['DOCUMENT_ROOT'].'/starter.php';
+  require_once $_SERVER['DOCUMENT_ROOT'].'/email.php';
+
+  require 'vendor/autoload.php';
+
+  $CONFIG['DB'] = array(
+      'dbDriver'	=> 	'mysql',
+      'hostname' 	=> 	'localhost',
+      'username' 	=> 	'homestead',
+      'password' 	=> 	'secret',
+      'dbName'	=>	'Trade'
+  );
+}
+
 Use Carbon\Carbon;
 
-$CONFIG['DB'] = array(
-    'dbDriver'	=> 	'mysql',
-    'hostname' 	=> 	'localhost',
-    'username' 	=> 	'homestead',
-    'password' 	=> 	'secret',
-    'dbName'	=>	'Trade'
-);
-
-$dbObj = new PDO($CONFIG['DB']['dbDriver'].':host='.$CONFIG['DB']['hostname'].';dbname='.$CONFIG['DB']['dbName'],
-    $CONFIG['DB']['username'],$CONFIG['DB']['password']);
+$dbObj = new PDO($CONFIG['DB']['dbDriver'].':host='.$CONFIG['DB']['hostname'].';dbname='.$CONFIG['DB']['dbName'],$CONFIG['DB']['username'],$CONFIG['DB']['password']);
 
 $sql = "SELECT * FROM zackRank";
 $query = $dbObj->query($sql);
-$FetchedMajors = $query->fetchAll();
+$completeZACKRANK_table = $query->fetchAll();
 
-foreach($FetchedMajors as $symbol){
-		if(Carbon::now("America/New_York")->diffInHours(Carbon::parse($symbol['Updated_At'], 'America/New_York')) > 24 || $symbol['Updated_At'] == NULL){
-		    $query = $dbObj->prepare("UPDATE zackRank set Rank=:Rank, Updated_At=:currentDatetime where symbol=:symbol");
+foreach($completeZACKRANK_table as $eachStockTicker){
+		if(Carbon::now("America/New_York")->diffInHours(Carbon::parse($eachStockTicker['Updated_At'], 'America/New_York')) > -1 || $eachStockTicker['Updated_At'] == NULL){
+
+        $zackValues = xtractZACKs($eachStockTicker['Symbol']);
+
+		    $query = $dbObj->prepare("UPDATE zackRank set Rank=:Rank, Updated_At=:currentDatetime, Industry=:industry, SubSector=:subsector where Symbol=:symbol");
 		    $param = array(
-		        ':Rank' => getRank($symbol['Symbol']),
-		        ':symbol' => $symbol['Symbol'],
-		        ':currentDatetime' => Carbon::now("America/New_York")
+		        ':Rank' => $zackValues['zackRank'],
+		        ':symbol' => $eachStockTicker['Symbol'],
+		        ':currentDatetime' => Carbon::now("America/New_York"),
+            ':industry' => $zackValues['zackIndustry'],
+            ':subsector'=> $zackValues['zackSubSector']
 		    );
 
 		    $row = $query->execute($param) or die(print_r($query->errorInfo(), true));
 		}
+    sleep(3);
 }
-echo "<!DOCTYPE html>";
-$sql = "SELECT * FROM zackRank where Rank < 3";
-$query = $dbObj->query($sql);
-$FetchedMajors = $query->fetchAll();
 
-$renderHTML = "<h4>Finished Processing - DB Update completed.</h4>";
-$renderHTML = $renderHTML . 
+$sql = "SELECT * FROM zackRank where Rank < 6 ORDER BY NextEarningsDate ASC";
+$query = $dbObj->query($sql);
+$filteredZACKRANK_table = $query->fetchAll();
+
+$renderHTML = "";
+$renderHTML = $renderHTML .
             "<table border='1'>
                 <tr>
                     <td> SYMBOL </td>
@@ -48,51 +71,46 @@ $renderHTML = $renderHTML .
                     <td> COMPANY NAME </td>
                     <td> Earnings Date </td>
                 </tr>";
-foreach($FetchedMajors as $symbol){
+foreach($filteredZACKRANK_table as $eachStockTicker){
 		$renderHTML = $renderHTML.
-                '<tr>
-                    <td>'.$symbol['Symbol'].'</td>
-                    <td>'.$symbol['Rank'].'</td>
-                    <td>'.$symbol['Company_Name'].'</td>
-                    <td>'.$symbol['NextEarningsDate'].'</td>
+                ($eachStockTicker['Rank'] < 3 ? '<tr style="color:green;">' : '<tr style="color:red;">').
+                   '<td>'.$eachStockTicker['Symbol'].'</td>
+                    <td>'.$eachStockTicker['Rank'].'</td>
+                    <td>'.$eachStockTicker['Company_Name'].'</td>
+                    <td>'.$eachStockTicker['NextEarningsDate'].'</td>
                 </tr>';
 }
 $renderHTML = $renderHTML . "</table>";
+
 echo ($renderHTML);
+//sendMail($renderHTML);
 
-sendMail($renderHTML);
 
-//SnPRanks();
-
-function SnPRanks(){
-    $stocklist = array();
-    $csv = array_map('str_getcsv', file('constituents.csv'));
-
-    for ($i=35; $i < 38; $i++) {
-        array_push($stocklist, $csv[$i][0]);
-        $rank = getRank($stocklist[$i-35]);
-				$nextEarning = getNextEarningsDate($stocklist[$i-35]);
-				$currentPrice = getYahooPrice($stocklist[$i-35]);
-				$oneYearTarget = get1yearPrice($stocklist[$i-35]);
-        if($rank[0] < 6){
-            echo "<div class='cell' style='margin: 5px; padding: 5px; min-width:300px;'>".$csv[$i][0]."</div>";
-            echo "<div class='cell' style='margin: 5px; padding: 5px; min-width:500px;'>".$csv[$i][1]."</div>";
-            echo "<div class='cell' style='margin: 5px; padding: 5px; min-width:400px;'>".$csv[$i][2]."</div>";
-            echo "<div class='cell' style='margin: 5px; padding: 5px; min-width:100px;'>".$rank."</div>";
-						echo "<div class='cell' style='margin: 5px; padding: 5px; min-width:100px;'>".$nextEarning."</div>";
-						echo "<div class='cell' style='margin: 5px; padding: 5px; min-width:100px;'>".$currentPrice."</div>";
-						echo "<div class='cell' style='margin: 5px; padding: 5px; min-width:100px;'>".$oneYearTarget."</div>";
-            echo "<br />";
-        }
-        //sleep(3);
-    }
-}
-
-function getRank($ticker){
+function xtractZACKs($ticker){
     $stock_url = 'https://www.zacks.com/stock/quote/'.$ticker;
 
     $content = get_web_page($stock_url);
-    $htmlPage = str_get_html($content['content']);
+    $zacksHtmlPage = str_get_html($content['content']);
+
+    $zackValues = [
+        'zackRank'            => '',
+        'zackEarningDate'     => '',
+        'zackLastClosingPrice'=> '',
+        'zackIndustry'        => '',
+        'zackSubSector'       => ''
+    ];
+    $zackValues['zackRank'] = getZACKRank($zacksHtmlPage);
+    $zackValues['zackEarningDate'] = getNextEarningsDate($zacksHtmlPage);
+    $zackValues['zackLastClosingPrice'] = getLastClosingPrice($zacksHtmlPage);
+    $zackValues['zackIndustry'] = getZackIndustry($zacksHtmlPage)['Industry'];
+    $zackValues['zackSubSector'] = getZackIndustry($zacksHtmlPage)['SubSector'];
+
+    return $zackValues;
+}
+
+
+
+function getZACKRank($htmlPage){
 
     $temp = trim($htmlPage->find("div.zr_rankbox")[1]->innertext());
 
@@ -101,26 +119,29 @@ function getRank($ticker){
     return $first;
 }
 
-function getNextEarningsDate($ticker){
-    $stock_url = 'https://www.zacks.com/stock/quote/'.$ticker;
-
-    $content = get_web_page($stock_url);
-    $htmlPage = str_get_html($content['content']);
+function getNextEarningsDate($htmlPage){
 
     $temp = $htmlPage->find("#stock_key_earnings sup.spl_sup_text")[0]->parent()->text();
 
     return $temp;
 }
 
-function getYahooPrice($ticker){
-    $stock_url = 'https://www.zacks.com/stock/quote/'.$ticker;
-
-    $content = get_web_page($stock_url);
-    $htmlPage = str_get_html($content['content']);
+function getLastClosingPrice($htmlPage){
 
     $temp = $htmlPage->find("p.last_price")[0]->text();
 
     return $temp;
+}
+
+function getZackIndustry($htmlPage){
+
+    $temp = $htmlPage->find("table.abut_top a");
+
+    return [
+      'Industry' => $temp[0]->text(),
+      'SubSector'=> $temp[1]->text()
+    ];
+
 }
 
 function get1yearPrice($ticker){

@@ -1,15 +1,27 @@
 <?php
 
-require_once $_SERVER['DOCUMENT_ROOT'].'/simple_html_dom.php';
-require_once $_SERVER['DOCUMENT_ROOT'].'/starter.php';
+if (strpos($_SERVER['DOCUMENT_ROOT'], 'C:') !== false) {
+  require_once $_SERVER['DOCUMENT_ROOT'].'/Trade/simple_html_dom.php';
+  require_once $_SERVER['DOCUMENT_ROOT'].'/Trade/starter.php';
+  $CONFIG['DB'] = array(
+      'dbDriver'	=> 	'mysql',
+      'hostname' 	=> 	'localhost',
+      'username' 	=> 	'root',
+      'password' 	=> 	'',
+      'dbName'	=>	'Trade'
+  );
+} else {
+  require_once $_SERVER['DOCUMENT_ROOT'].'/simple_html_dom.php';
+  require_once $_SERVER['DOCUMENT_ROOT'].'/starter.php';
+  $CONFIG['DB'] = array(
+      'dbDriver'	=> 	'mysql',
+      'hostname' 	=> 	'localhost',
+      'username' 	=> 	'homestead',
+      'password' 	=> 	'secret',
+      'dbName'	=>	'Trade'
+  );
+}
 
-$CONFIG['DB'] = array(
-    'dbDriver'	=> 	'mysql',
-    'hostname' 	=> 	'localhost',
-    'username' 	=> 	'homestead',
-    'password' 	=> 	'secret',
-    'dbName'	=>	'Trade'
-);
 
 $dbObj = new PDO($CONFIG['DB']['dbDriver'].':host='.$CONFIG['DB']['hostname'].';dbname='.$CONFIG['DB']['dbName'],
     $CONFIG['DB']['username'],$CONFIG['DB']['password']);
