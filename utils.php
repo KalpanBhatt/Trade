@@ -31,39 +31,12 @@ $query = $dbObj->query($sql);
 $FetchedMajors = $query->fetchAll();
 
 foreach ($FetchedMajors as $symbols) {
-	if ($symbols['Company_Name'] == NULL) {
-		$query = $dbObj->prepare("UPDATE zackRank set Company_Name=:name where Symbol=:symbol");
-	    $param = array(
-	        ':name' => getFullName($symbols['Symbol']),
-	        ':symbol' => $symbols['Symbol']
-	    );
-
-		$row = $query->execute($param) or die(print_r($query->errorInfo(), true));
-	}
-
-	if ($symbols['NextEarningsDate'] == NULL && $symbols['Rank'] != 0) {
-		$query = $dbObj->prepare("UPDATE zackRank set NextEarningsDate=:EarningsDate where Symbol=:symbol");
-	    $param = array(
-	        ':EarningsDate' => getNextEarningsDate($symbols['Symbol']),
-	        ':symbol' => $symbols['Symbol']
-	    );
-
-		$row = $query->execute($param) or die(print_r($query->errorInfo(), true));
-	}
+	
 }
 
 updateEarningsDate($FetchedMajors, $dbObj);
 
-function getFullName($ticker){
-    $stock_url = 'https://www.zacks.com/stock/quote/'.$ticker;
 
-    $content = get_web_page($stock_url);
-    $htmlPage = str_get_html($content['content']);
-
-    $temp = trim($htmlPage->find("#quote_ribbon_v2 a")[0]->innertext());
-
-    return $temp;
-}
 
 
 function getNextEarningsDate($ticker){

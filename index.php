@@ -33,6 +33,7 @@ if (strpos($_SERVER['DOCUMENT_ROOT'], 'C:') !== false) {
 
 Use Carbon\Carbon;
 
+
 $dbObj = new PDO($CONFIG['DB']['dbDriver'].':host='.$CONFIG['DB']['hostname'].';dbname='.$CONFIG['DB']['dbName'],$CONFIG['DB']['username'],$CONFIG['DB']['password']);
 
 $sql = "SELECT * FROM zackRank";
@@ -40,27 +41,73 @@ $query = $dbObj->query($sql);
 $completeZACKRANK_table = $query->fetchAll();
 
 foreach($completeZACKRANK_table as $eachStockTicker){
-		if(Carbon::now("America/New_York")->diffInHours(Carbon::parse($eachStockTicker['Updated_At'], 'America/New_York')) > -1 || $eachStockTicker['Updated_At'] == NULL){
+	if($eachStockTicker['Updated_At'] == NULL || Carbon::now("America/New_York")->diffInHours(Carbon::parse($eachStockTicker['Updated_At'], 'America/New_York')) > 24){
 
         $zackValues = xtractZACKs($eachStockTicker['Symbol']);
+        var_dump($zackValues);
+        
+	    $param = array(
+	        ':symbol' => $eachStockTicker['Symbol'],
+	        ':currentDatetime' => Carbon::now("America/New_York"));
 
-		    $query = $dbObj->prepare("UPDATE zackRank set Rank=:Rank, Updated_At=:currentDatetime, Industry=:industry, SubSector=:subsector where Symbol=:symbol");
-		    $param = array(
-		        ':Rank' => $zackValues['zackRank'],
-		        ':symbol' => $eachStockTicker['Symbol'],
-		        ':currentDatetime' => Carbon::now("America/New_York"),
-            ':industry' => $zackValues['zackIndustry'],
-            ':subsector'=> $zackValues['zackSubSector']
-		    );
+        if ($eachStockTicker['CurrentRank'] == NULL || $zackValues['zackRank'] !== $eachStockTicker['CurrentRank']) {
+            // Rank changed, so capture todays date and rank, and update previous ranks
+            $query = $dbObj->prepare("UPDATE zackRank 
+                                SET CurrentRank=:rank,
+                                    CurrentRank_UpdateDate=:currentRank_UpdateDate,
+                                    Rank1_UpdateDate=:rank1_UpdateDate,
+                                    PreviousRank_1=:previousRank_1,
+                                    Rank2_UpdateDate=:rank2_UpdateDate,
+                                    PreviousRank_2=:previousRank_2,
+                                    Updated_At=:currentDatetime 
+                                WHERE Symbol=:symbol");
 
-		    $row = $query->execute($param) or die(print_r($query->errorInfo(), true));
-		}
-    sleep(3);
+            $param[':rank'] = $zackValues['zackRank'];
+            $param[':currentRank_UpdateDate'] = Carbon::now("America/New_York")->toDateString();
+            $param[':previousRank_1'] = $eachStockTicker['CurrentRank'];
+            $param[':rank1_UpdateDate'] = $eachStockTicker['CurrentRank_UpdateDate'];
+            $param[':previousRank_2'] = $eachStockTicker['PreviousRank_1'];
+            $param[':rank2_UpdateDate'] = $eachStockTicker['Rank1_UpdateDate'];
+            
+            $row = $query->execute($param) or die(print_r($query->errorInfo(), true));   
+        }
+        
+        if ($zackValues['zackIndustry'] !== $eachStockTicker['Industry'] || $zackValues['zackSubSector'] !== $eachStockTicker['SubSector'] || $zackValues['zackCompanyName'] !== $eachStockTicker['Company_Name']) {
+            $query = $dbObj->prepare("UPDATE zackRank 
+                                SET Industry=:industry,
+                                    SubSector=:subSector,
+                                    Company_Name=:companyName,
+                                    Updated_At=:currentDatetime 
+                                WHERE Symbol=:symbol");
+
+            $param[':industry'] = $zackValues['zackIndustry'];
+            $param[':subSector'] = $zackValues['zackSubSector'];
+            $param[':companyName'] = $zackValues['zackCompanyName'];
+
+            $row = $query->execute($param) or die(print_r($query->errorInfo(), true));
+        }
+        var_dump(date("Y-m-d"));
+        var_dump($eachStockTicker['NextEarningsDate']);
+        if (($eachStockTicker['NextEarningsDate'] == NULL && $eachStockTicker['CurrentRank'] != 0) || $eachStockTicker['NextEarningsDate'] < date("Y-m-d")) {
+            if ((strpos($zackValues['zackEarningDate'], 'AMC') !== false) || (strpos($zackValues['zackEarningDate'], 'BMO') !== false)) {
+                $zackValues['zackEarningDate'] = substr($zackValues['zackEarningDate'], 4);
+            }
+            $query = $dbObj->prepare("UPDATE zackRank 
+                                SET NextEarningsDate=:EarningsDate
+                                WHERE Symbol=:symbol");
+            var_dump($zackValues['zackEarningDate']);
+            var_dump(Carbon::createFromFormat('m/d/Y', $zackValues['zackEarningDate']));
+            $param[':EarningsDate'] = Carbon::createFromFormat('m/d/Y', $zackValues['zackEarningDate'])->toDateString();
+
+            $row = $query->execute($param) or die(print_r($query->errorInfo(), true));
+        }
+        sleep(3);
+	}
 }
 
-$sql = "SELECT * FROM zackRank where Rank < 6 ORDER BY NextEarningsDate ASC";
+$sql = "SELECT * FROM zackRank ORDER BY NextEarningsDate ASC";
 $query = $dbObj->query($sql);
-$filteredZACKRANK_table = $query->fetchAll();
+$sortedZACKRANK_table = $query->fetchAll();
 
 $renderHTML = "";
 $renderHTML = $renderHTML .
@@ -71,11 +118,11 @@ $renderHTML = $renderHTML .
                     <td> COMPANY NAME </td>
                     <td> Earnings Date </td>
                 </tr>";
-foreach($filteredZACKRANK_table as $eachStockTicker){
+foreach($sortedZACKRANK_table as $eachStockTicker){
 		$renderHTML = $renderHTML.
-                ($eachStockTicker['Rank'] < 3 ? '<tr style="color:green;">' : '<tr style="color:red;">').
+                ($eachStockTicker['CurrentRank'] < 3 ? '<tr style="color:green;">' : ($eachStockTicker['CurrentRank'] > 3 ? '<tr style="color:red;">' : '<tr style="color:black;">')).
                    '<td>'.$eachStockTicker['Symbol'].'</td>
-                    <td>'.$eachStockTicker['Rank'].'</td>
+                    <td>'.$eachStockTicker['CurrentRank'].'</td>
                     <td>'.$eachStockTicker['Company_Name'].'</td>
                     <td>'.$eachStockTicker['NextEarningsDate'].'</td>
                 </tr>';
@@ -97,13 +144,15 @@ function xtractZACKs($ticker){
         'zackEarningDate'     => '',
         'zackLastClosingPrice'=> '',
         'zackIndustry'        => '',
-        'zackSubSector'       => ''
+        'zackSubSector'       => '',
+        'zackCompanyName'     => ''
     ];
     $zackValues['zackRank'] = getZACKRank($zacksHtmlPage);
     $zackValues['zackEarningDate'] = getNextEarningsDate($zacksHtmlPage);
     $zackValues['zackLastClosingPrice'] = getLastClosingPrice($zacksHtmlPage);
     $zackValues['zackIndustry'] = getZackIndustry($zacksHtmlPage)['Industry'];
     $zackValues['zackSubSector'] = getZackIndustry($zacksHtmlPage)['SubSector'];
+    $zackValues['zackCompanyName'] = getZackFullName($zacksHtmlPage);
 
     return $zackValues;
 }
@@ -115,7 +164,7 @@ function getZACKRank($htmlPage){
     $temp = trim($htmlPage->find("div.zr_rankbox")[1]->innertext());
 
     $arr = explode("<span", $temp, 2);
-    $first = $arr[0];
+    $first = substr($arr[0], 0, 1);
     return $first;
 }
 
@@ -141,7 +190,13 @@ function getZackIndustry($htmlPage){
       'Industry' => $temp[0]->text(),
       'SubSector'=> $temp[1]->text()
     ];
+}
 
+function getZackFullName($htmlPage){
+
+    $temp = trim($htmlPage->find("#quote_ribbon_v2 a")[0]->innertext());
+
+    return $temp;
 }
 
 function get1yearPrice($ticker){
@@ -154,3 +209,20 @@ function get1yearPrice($ticker){
 
     return $temp;
 }
+/*
+
+(`ID`,
+`Symbol`,
+`NextEarningsDate`,             DATE
+`Company_Name`,
+`CurrentRank`,                  INT(11)
+`CurrentRank_UpdateDate`,       DATE
+`PreviousRank_1`,               INT(11)
+`Rank1_UpdateDate`,             DATE
+`PreviousRank_2`,               INT(11)
+`Rank2_UpdateDate`,             DATE
+`Industry`,
+`SubSector`,
+`Updated_At`)
+
+*/
