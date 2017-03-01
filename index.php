@@ -40,9 +40,15 @@ $query = $dbObj->query($sql);
 $completeZACKRANK_table = $query->fetchAll();
 
 foreach($completeZACKRANK_table as $eachStockTicker){
-	if($eachStockTicker['Updated_At'] == NULL || Carbon::now("America/New_York")->diffInHours(Carbon::parse($eachStockTicker['Updated_At'], 'America/New_York')) > 22){
+	if($eachStockTicker['Updated_At'] == NULL || Carbon::now("America/New_York")->diffInHours(Carbon::parse($eachStockTicker['Updated_At'], 'America/New_York')) > 24){
 
         $zackValues = xtractZACKs($eachStockTicker['Symbol']);
+
+        $query = $dbObj->prepare("UPDATE zackRank 
+                                SET Latest_ClosingPrice=".$zackValues['zackLastClosingPrice'].
+                                ", Updated_At='".Carbon::now("America/New_York").
+                                "' WHERE ID=".$eachStockTicker['ID']);
+        $row = $query->execute() or die(print_r($query->errorInfo(), true));
 
         if ($eachStockTicker['CurrentRank'] == NULL || $zackValues['zackRank'] !== $eachStockTicker['CurrentRank']) {
             // Rank changed, so capture todays date and rank, and update previous ranks
@@ -51,8 +57,10 @@ foreach($completeZACKRANK_table as $eachStockTicker){
                                     CurrentRank_UpdateDate=:currentRank_UpdateDate,
                                     Rank1_UpdateDate=:rank1_UpdateDate,
                                     PreviousRank_1=:previousRank_1,
+                                    Rank1_ClosingPrice=:rank1_ClosingPrice,
                                     Rank2_UpdateDate=:rank2_UpdateDate,
                                     PreviousRank_2=:previousRank_2,
+                                    Rank2_ClosingPrice=:rank2_ClosingPrice,
                                     Updated_At=:currentDatetime
                                 WHERE Symbol=:symbol");
 
@@ -62,8 +70,10 @@ foreach($completeZACKRANK_table as $eachStockTicker){
             $param1[':currentRank_UpdateDate'] = Carbon::now("America/New_York")->toDateString();
             $param1[':previousRank_1'] = $eachStockTicker['CurrentRank'];
             $param1[':rank1_UpdateDate'] = $eachStockTicker['CurrentRank_UpdateDate'];
+            $param1[':rank1_ClosingPrice'] = $eachStockTicker['Latest_ClosingDate'];
             $param1[':previousRank_2'] = $eachStockTicker['PreviousRank_1'];
             $param1[':rank2_UpdateDate'] = $eachStockTicker['Rank1_UpdateDate'];
+            $param1[':rank2_ClosingPrice'] = $eachStockTicker['Rank1_ClosingPrice'];
             $param1[':currentDatetime'] = Carbon::now("America/New_York");
 
             $row = $query->execute($param1) or die(print_r($query->errorInfo(), true));
@@ -85,8 +95,8 @@ foreach($completeZACKRANK_table as $eachStockTicker){
 
             $row = $query->execute($param2) or die(print_r($query->errorInfo(), true));
         }
-
-        if (($eachStockTicker['NextEarningsDate'] == NULL && $eachStockTicker['CurrentRank'] != 0) || $eachStockTicker['NextEarningsDate'] < date("Y-m-d")) {
+        // What if earningsDate changes after it is initially set
+        if ($eachStockTicker['NextEarningsDate'] == NULL || $zackValues['zackEarningDate'] !== $eachStockTicker['NextEarningsDate']) {
             if ((strpos($zackValues['zackEarningDate'], 'AMC') !== false) || (strpos($zackValues['zackEarningDate'], 'BMO') !== false)) {
                 $zackValues['zackEarningDate'] = substr($zackValues['zackEarningDate'], 4);
             }
@@ -102,11 +112,11 @@ foreach($completeZACKRANK_table as $eachStockTicker){
 
             $row = $query->execute($param3) or die(print_r($query->errorInfo(), true));
         }
-        sleep(3);
+        //sleep(3);
 	}
 }
 
-$sql = "SELECT * FROM zackRank ORDER BY NextEarningsDate ASC";
+$sql = "SELECT * FROM zackRank ORDER BY CurrentRank ASC";
 $query = $dbObj->query($sql);
 $sortedZACKRANK_table = $query->fetchAll();
 
@@ -158,8 +168,6 @@ function xtractZACKs($ticker){
     return $zackValues;
 }
 
-
-
 function getZACKRank($htmlPage){
 
     $temp = trim($htmlPage->find("div.zr_rankbox")[1]->innertext());
@@ -180,7 +188,8 @@ function getNextEarningsDate($htmlPage){
 function getLastClosingPrice($htmlPage){
 
     $temp = $htmlPage->find("p.last_price")[0]->text();
-
+    $temp = trim(substr($temp, 1));     //Remove $ sign and trim trailing spaces
+    $temp = substr($temp, 0, strpos($temp, ' '));       //Remove USD from text
     return $temp;
 }
 
