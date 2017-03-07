@@ -40,7 +40,7 @@ $query = $dbObj->query($sql);
 $completeZACKRANK_table = $query->fetchAll();
 
 foreach($completeZACKRANK_table as $eachStockTicker){
-	if($eachStockTicker['Updated_At'] == NULL || Carbon::now("America/New_York")->diffInHours(Carbon::parse($eachStockTicker['Updated_At'], 'America/New_York')) > 24){
+	if($eachStockTicker['Updated_At'] == NULL || Carbon::now("America/New_York")->diffInHours(Carbon::parse($eachStockTicker['Updated_At'], 'America/New_York')) > 18){
 
         $zackValues = xtractZACKs($eachStockTicker['Symbol']);
 
@@ -55,6 +55,7 @@ foreach($completeZACKRANK_table as $eachStockTicker){
             $query = $dbObj->prepare("UPDATE zackRank
                                 SET CurrentRank=:rank,
                                     CurrentRank_UpdateDate=:currentRank_UpdateDate,
+                                    PriceWhenCurrentRankSet=:priceWhenCurrentRankSet,
                                     Rank1_UpdateDate=:rank1_UpdateDate,
                                     PreviousRank_1=:previousRank_1,
                                     Rank1_ClosingPrice=:rank1_ClosingPrice,
@@ -68,9 +69,10 @@ foreach($completeZACKRANK_table as $eachStockTicker){
             $param1[':symbol'] = $eachStockTicker['Symbol'];
             $param1[':rank'] = $zackValues['zackRank'];
             $param1[':currentRank_UpdateDate'] = Carbon::now("America/New_York")->toDateString();
+            $param1["priceWhenCurrentRankSet"] = $zackValues['zackLastClosingPrice'];
             $param1[':previousRank_1'] = $eachStockTicker['CurrentRank'];
             $param1[':rank1_UpdateDate'] = $eachStockTicker['CurrentRank_UpdateDate'];
-            $param1[':rank1_ClosingPrice'] = $eachStockTicker['Latest_ClosingDate'];
+            $param1[':rank1_ClosingPrice'] = $eachStockTicker['Latest_ClosingPrice'];
             $param1[':previousRank_2'] = $eachStockTicker['PreviousRank_1'];
             $param1[':rank2_UpdateDate'] = $eachStockTicker['Rank1_UpdateDate'];
             $param1[':rank2_ClosingPrice'] = $eachStockTicker['Rank1_ClosingPrice'];
@@ -116,7 +118,7 @@ foreach($completeZACKRANK_table as $eachStockTicker){
 	}
 }
 
-$sql = "SELECT * FROM zackRank ORDER BY CurrentRank ASC";
+$sql = "SELECT * FROM zackRank ORDER BY NextEarningsDate ASC";
 $query = $dbObj->query($sql);
 $sortedZACKRANK_table = $query->fetchAll();
 
@@ -128,6 +130,7 @@ $renderHTML = $renderHTML .
                     <td> RANK </td>
                     <td> COMPANY NAME </td>
                     <td> Earnings Date </td>
+                    <td> Latest Price </td>
                 </tr>";
 foreach($sortedZACKRANK_table as $eachStockTicker){
 		$renderHTML = $renderHTML.
@@ -136,6 +139,7 @@ foreach($sortedZACKRANK_table as $eachStockTicker){
                     <td>'.$eachStockTicker['CurrentRank'].'</td>
                     <td>'.$eachStockTicker['Company_Name'].'</td>
                     <td>'.$eachStockTicker['NextEarningsDate'].'</td>
+                    <td>'.$eachStockTicker['Latest_ClosingPrice'].'</td>
                 </tr>';
 }
 $renderHTML = $renderHTML . "</table>";
